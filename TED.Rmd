@@ -1,0 +1,281 @@
+---
+title: "TED Talks -EDA"
+author: "GSD"
+date: "December 30, 2017"
+output: 
+  html_document:
+    toc: true
+    code_folding: hide
+    
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE,warning = FALSE)
+```
+
+# Introduction
+
+* According to Wikipedia,TED(Technology,Entertainment,Design) is an media organisation which posts talks online for free distribution,under the slogan "ideas worth spreading".
+
+* This dataset has details on 2550 ted talks with which I intend to do exploratory data analysis bringing out subtle information and key insights on the TED talks.
+
+* I intend to use standard libraries like **ggplot**,**dplyr** for my data analysis.
+
+**If you like my kernel,pls upvote and encourage**
+
+# Loading the dataset
+
+Loading the libraries and dataset,
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+library(RColorBrewer)
+library(dplyr)
+library(viridis)
+library(stringr)
+library(ggthemes)
+library(tidyverse)
+library(wordcloud2)
+library(data.table)
+library(anytime)
+library(zoo)
+library(treemap)
+library(cowplot)
+library(wordcloud)
+ted=read.csv("ted_main.csv",header=TRUE,stringsAsFactors = FALSE)
+transcript=read.csv("transcripts.csv",header=TRUE,stringsAsFactors = FALSE)
+glimpse(ted)
+```
+
+
+Let us also create a helper function for theme.
+
+```{r}
+themefn=theme(legend.position="none",axis.text.x=element_text(angle=90,hjust=0.5),plot.title=element_text(size=12,hjust=0.5,face="bold",margin=margin(b=20)))
+```
+
+
+
+# Analysis with Histogram
+
+
+Before we deepdive into specifics,let us understand the median count of number of comments and durations in the form of histogram.
+
+```{r,fig.width=6,fig.height=7}
+p1=ggplot(ted,aes(comments,..count..))+geom_histogram(fill="red2")+themefn+labs(x="Comments",y="Count",title="Distribution of comments")+scale_x_continuous(limits=c(0,1500),breaks=seq(0,1500,150))+geom_vline(aes(xintercept = median(ted$comments)),linetype=4,size=1,color="black")
+
+p2=ggplot(ted,aes(duration,..count..))+geom_histogram(fill="pink2")+themefn+labs(x="Duration",y="Count",title="Distribution of Duration")+geom_vline(aes(xintercept = median(ted$duration)),linetype=4,size=1,color="black")+scale_x_continuous(limits=c(0,4000),breaks=seq(0,4000,500))
+plot_grid(p1,p2,label_fontface = "italics",cols=1)
+```
+* The plots of duration and comments seems to be normaly distributed.
+
+* From the plots, it is seen that the distribution of comments is skewed to the right with the median comment value less than 150.
+
+* In the case of the distribution of duration,it is seen that the median value is less than 1000 seconds that is less than 16 minutes.Now let us see the summary statistics for views.
+
+```{r}
+summary(ted$views)
+```
+
+The median views is about 11.2 million and the maximum views for a talk has been 47.2 million.
+
+
+# Duration and Views:
+
+Let us see if there is any correlation between duration of talk and views.
+
+```{r}
+ggplot(ted,aes(views,duration,size=views,col=duration))+geom_point(alpha=0.8)+geom_smooth(method=lm)+themefn+labs(x="No.of Views",y="Duration",title="No of views Vs Duration")+scale_color_gradientn(colors=colorRampPalette(brewer.pal(9,'OrRd'))(100))+scale_x_continuous(labels=scales::comma)
+```
+
+
+From the graph ,it is seen that there is no strong correlation between views and duration.The duration mostly remains below 1500 seconds and has generated views more than 40 Ml.
+
+# Correlation plot
+
+Let us plot the correlation plot of numerical variables.
+
+```{r}
+colnames(ted)
+numeric=  ted %>% select(comments,duration,num_speaker,languages,views)
+corrplot::corrplot(cor(numeric),method="number",bg="white",title="Correlation between numeric variables")
+```
+
+
+It is seen that there exist a medium  positive correlation between number of views and duration.As the number of views increases,the number of comments also seem to rise.
+
+
+
+# Most number of talks in an event:
+
+We want to know what are the events held over the year and how many talks have been delievered in each event.
+
+```{r}
+cat("There are ",length(unique(ted$event)),"unique events")
+temp=ted %>% group_by(event) %>% tally() %>% arrange(desc(n))
+ggplot(head(temp,20),aes(factor(event,levels=event),n,fill=event))+geom_bar(stat="identity")+scale_fill_viridis(discrete=TRUE,option="C")+themefn+labs(x="Event",y="Number of Talks",title="Top 20 Events by number of talks")+scale_x_discrete(labels=function(x) str_wrap(x,width=10))
+```
+
+
+From the plot it may be seen that there is no visible trend observed with every increasing year of TED events held.TED 2014 has held about 80 talks followed by TED 209 event.Therefore there has been no increase in TED talks every year.
+
+# Top 5 most viewed talks in each event:
+
+Let us visualise the most viewed talks in each event through treemap.We first sort out top 5 talks in each event and visualize them though the events separately in treemap.eg:TEDyyy,tedglobal,tedx etc...are visualized separately.
+
+```{r}
+unique(temp$event)
+temp=data.table(ted) #Data.table
+temp=temp[,head(.SD,5),by=event] %>% select(event,name,views) %>% group_by(event) #Select top 5 talks in each event by views
+temp$viewsinMl=round(temp$views/1000000,2) #convert views to millions
+pattern="TED[:digit:]" #Select only TEDYYYY events.
+tedevent=temp[str_detect(temp$event,pattern)==TRUE,] #Subset the pattern to separate DF
+```
+
+
+Visualizing for TEDYYYY events,
+
+```{r,fig.width=12,fig.height=7}
+treemap(tedevent,index=c("event","name"),vSize ="viewsinMl",vColor = "event",palette="Set3",title="TED Events",sortID ="-viewsinMl",border.col = "#FFFFFF",type="categorical",fontsize.legend = 0,fontsize.title = 17,bg.labels = "#FFFFFF") #Visualize using treemap
+```
+
+
+It is seen that TED2006 talk by Ken Robinson has garnered more views than anyother ted events.This is followed by TED2009 talk by Elizabeth Gilbert.
+
+Lets see for TEDGlobal events in a similar manner,
+
+```{r,fig.width=12,fig.height=10}
+pattern="TEDGlobal" #Select only TEDGlobal events.
+tedglobal=temp[str_detect(temp$event,pattern)==TRUE,] #Subset the pattern to separate DF
+treemap(tedglobal,index=c("event","name"),vSize ="viewsinMl",vColor = "event",palette="HCL",title="TED Global",sortID ="-viewsinMl",border.col = "#9B30FF",type="categorical",fontsize.legend = 0,fontsize.title = 17,bg.labels = "#FFFFFF") #Visualize using treemap
+  ```
+
+TEDGlobal 2012 has a talk by Amy Cuddy which has most number of viewers followed by James Veitch talk at TEDGlobal Geneva. 
+```
+
+
+##TEDx
+
+TEDx is an independently organized TED event.Let us see which talks have generated most views in this category.Here we try to visualize the talks that has garnered > 2 million views.
+
+```{r,fig.width=12,fig.height=12}
+pattern="TEDx"
+tedx=temp[str_detect(temp$event,pattern)==TRUE,]
+tedx=tedx %>% filter(viewsinMl>2)
+treemap(tedx,index=c("event","name"),vSize ="viewsinMl",vColor = "event",palette="Set3",title="TEDx-Independently Organized TED Event",sortID ="-viewsinMl",border.col = "#FFFFFF",type="categorical",fontsize.legend = 0,fontsize.title = 17,bg.labels = "#FFFFFF")
+```
+
+Talks  by Simon Sinek and Bren Brown has generated more than 30 Million views in TEDx category.
+
+## TED India
+
+Let us visualise the views for events held in India
+
+```{r,fig.width=10,fig.height=7}
+pattern="TED[I-i]ndia"
+TEDIndia=temp[str_detect(temp$event,pattern)==TRUE,]
+treemap(TEDIndia,index=c("event","name"),vSize ="viewsinMl",vColor = "name",palette="Set3",title="TEDIndia",sortID ="-viewsinMl",border.col = "#FFFFFF",type="categorical",fontsize.legend = 0,fontsize.title = 17,bg.labels = "#FFFFFF")
+```
+
+In India ,TED has organized event only in 2009 and the talks by Pranav Mistry has garnered 16 Million views followed by Devdutt Pattanaik.Now there is a program on Star plus called **Nayi Soochi** hosted by Bollywood star Shah Rukh for TED Talks India.For more information on the talks visit this [link](https://www.ted.com/india).
+
+
+## Other Talks
+
+Let us visualize the views on the talks hosted in names other than TED.We take only talks that has >1 million views for better visualisation.
+
+```{r,fig.width=10,fig.height=7}
+pattern="^TED"
+others=temp[!(str_detect(temp$event,pattern)==TRUE),]
+others=others %>% filter(viewsinMl>=1)
+treemap(others,index=c("event","name"),vSize ="viewsinMl",vColor = "event",palette="Set3",title="TEDIndia",sortID ="-viewsinMl",border.col = "#FFFFFF",type="categorical",fontsize.legend = 0,fontsize.title = 17,bg.labels = "#FFFFFF")
+```
+
+The talk by Steve Jobs on **How to live before you die** has 8 Million views followed by 6 millon views for **Alexander Tsiaras: Conception to birth -- visualized** in INK conference.
+
+## Overall Top 10 talks by Views:
+
+Now that we have brought out the top 5 talks in each events,we want to know the overall top 10 talks by views.Let us visualise and understand which has talk has most number of views.
+
+```{r,fig.width=10,fig.height=5}
+temp %>% arrange(desc(viewsinMl)) %>% head(10) %>% ggplot(aes(reorder(event,viewsinMl),viewsinMl,fill=name))+geom_bar(stat="identity",position=position_dodge())+theme(legend.position="none",axis.text.x = element_text(angle=90),plot.title = element_text(size=15,hjust=0.5))+labs(x="Event",y="Views in Million",title="Top 10 Most Viewed talks")+coord_flip()+geom_label_repel(aes(label=name,fill=factor(event)),fontface="bold",color="white",box.padding=0.30)
+```
+
+
+# Top 5 talks Most number of characters in a description:
+
+In an interesting analysis,I am  going to find the top 10 talks that has most number of characters in the description and correlate it with the number of views it garnered.I am interested to find out whether the length of the description actually distracts the user from viewing the content.
+
+```{r}
+temp = ted %>% select(description,name,duration,views) %>% mutate(desclen=str_length(description))
+summary(temp$desclen)
+```
+
+From the summary statistics,it is seen that the median length of the description is about 297 (including spaces),slighly higher than permissible twitter character length.Where as on the higher side about 25 % of them have description length more than 380,the maximum being 769.Let us visualize the top 5 talks having most description length.
+
+```{r}
+temp %>% arrange(desc(desclen))  %>% head(5) %>%  ggplot(aes(reorder(name,desclen),desclen,fill=name))+geom_bar(stat="identity")+labs(x="",y="Description length",title="Top 5 talks with most description length")+coord_flip()+theme(axis.title.y=element_blank(),axis.text.y = element_blank(),axis.ticks.y = element_blank(),legend.position="none",plot.title = element_text(size=16,hjust=0.5))+geom_label_repel(aes(fill=factor(name),label=name),fontface="bold",color="white")+scale_fill_brewer(palette = "Set1")
+```
+
+Now let us see whether this has any relation with the number of views.
+
+```{r}
+ggplot(temp,aes(desclen,views,size=views))+geom_point(alpha=0.6,col="#fd3f4f")+geom_smooth(method="lm")+themefn+labs(x="Description length",y="Number of Views",title="Relation between description length Vs Number of views")+scale_y_continuous(labels=scales::comma)
+```
+
+From the plot it is understood that there is no relation between the number of views and description length.
+
+#Speakers occupation
+
+Lets understand about the speakers occupation.
+
+```{r}
+temp=ted %>% group_by(speaker_occupation) %>% tally(sort=TRUE)
+attach(temp)
+wordcloud(speaker_occupation,n,scale=c(3,0.008),min.freq=5,random.order = TRUE,random.color = TRUE,rot.per = 0.3,colors=c("#d7dd35","#465c8b","#3f3250","#ccdfcb"))
+```
+
+# Date -Analysis 
+
+Converting the dates into proper format,
+
+```{r}
+ted$date=anydate(ted$film_date)
+ted$month=month(ted$date)
+ted$year=year(ted$date)
+ted$wkday=weekdays(ted$date,abbreviate = TRUE)
+ted$pubdate=anydate(ted$published_date)
+ted$pubmonth=month(ted$pubdate)
+ted$pubyear=year(ted$pubdate)
+ted$pubwkday=weekdays(ted$pubdate,abbreviate = TRUE)
+```
+
+Let us see which weekday has generated more views.
+
+```{r}
+temp=ted %>% group_by(pubwkday) %>% summarise(totalviews=sum(views)) %>% arrange(desc(totalviews)) 
+ggplot(temp,aes(factor(pubwkday,levels=pubwkday),totalviews,fill=pubwkday))+geom_bar(stat="identity")+themefn+labs(x="Published Week Day",y="Total Views",title="Published Weekday Vs Total number of views")+scale_fill_brewer(name="pubwkday",palette = "Set1")+scale_y_continuous(labels=scales::comma)
+```
+
+Talks published on wednesday has generated more views followed by friday,tuesday,thursday and monday.The difference between the dates are very small and hence it is not possible to say more on this.Whereas talks published on saturday and sunday have generated lowwer views.Therefore it may be concluded that the site has 5 day working and works only occasionaly on weekends and publishes more contents only on weekdays.Let us test the statistical significance
+
+```{r}
+temp=ted %>% select(pubdate,views)
+temp$wkday=lubridate::wday(temp$pubdate)
+ted$pubmonth=lubridate::month(ted$pubmonth,abbr=TRUE,label=TRUE)
+anova(lm(wkday~views,data=na.omit(temp)))
+```
+
+Our ANOVA test reveals that there is no significant difference in the number of views with the days of the week.This is inline with the graph shown above.
+
+#Number of views by month & year 
+
+Let us see the number of views by month and year.Here I have made use of data.table package which reduces significant processing time and memory.
+
+```{r,fig.width=20,fig.height=10}
+temp=setDT(ted)[,.(totalviews=sum(views)),by=.(pubmonth,pubyear)][order(-totalviews)]
+ggplot(temp,aes(pubmonth,totalviews,group=1))+geom_point(alpha=0.4,aes(color=factor(pubmonth),size=totalviews))+geom_line(size=2,alpha=0.2)+themefn+labs(x="Month",y="Total Views",title="Trend of views over the month in a year ")+scale_y_continuous(labels=scales::comma)+facet_grid(pubyear~. ,scales="free",space="free")+scale_color_brewer(palette="Set3")
+```
+
